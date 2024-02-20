@@ -31,9 +31,7 @@
 //
 //========================================================================
 
-#define GLAD_GL_IMPLEMENTATION
-#include <glad/gl.h>
-#define GLFW_INCLUDE_NONE
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include <stdio.h>
@@ -176,7 +174,7 @@ static const char* get_key_name(int key)
         case GLFW_KEY_KP_8:         return "KEYPAD 8";
         case GLFW_KEY_KP_9:         return "KEYPAD 9";
         case GLFW_KEY_KP_DIVIDE:    return "KEYPAD DIVIDE";
-        case GLFW_KEY_KP_MULTIPLY:  return "KEYPAD MULTIPLY";
+        case GLFW_KEY_KP_MULTIPLY:  return "KEYPAD MULTPLY";
         case GLFW_KEY_KP_SUBTRACT:  return "KEYPAD SUBTRACT";
         case GLFW_KEY_KP_ADD:       return "KEYPAD ADD";
         case GLFW_KEY_KP_DECIMAL:   return "KEYPAD DECIMAL";
@@ -254,32 +252,17 @@ static const char* get_mods_name(int mods)
     return name;
 }
 
-static size_t encode_utf8(char* s, unsigned int ch)
+static const char* get_character_string(int codepoint)
 {
-    size_t count = 0;
+    // This assumes UTF-8, which is stupid
+    static char result[6 + 1];
 
-    if (ch < 0x80)
-        s[count++] = (char) ch;
-    else if (ch < 0x800)
-    {
-        s[count++] = (ch >> 6) | 0xc0;
-        s[count++] = (ch & 0x3f) | 0x80;
-    }
-    else if (ch < 0x10000)
-    {
-        s[count++] = (ch >> 12) | 0xe0;
-        s[count++] = ((ch >> 6) & 0x3f) | 0x80;
-        s[count++] = (ch & 0x3f) | 0x80;
-    }
-    else if (ch < 0x110000)
-    {
-        s[count++] = (ch >> 18) | 0xf0;
-        s[count++] = ((ch >> 12) & 0x3f) | 0x80;
-        s[count++] = ((ch >> 6) & 0x3f) | 0x80;
-        s[count++] = (ch & 0x3f) | 0x80;
-    }
+    int length = wctomb(result, codepoint);
+    if (length == -1)
+        length = 0;
 
-    return count;
+    result[length] = '\0';
+    return result;
 }
 
 static void error_callback(int error, const char* description)
@@ -320,12 +303,6 @@ static void window_close_callback(GLFWwindow* window)
     Slot* slot = glfwGetWindowUserPointer(window);
     printf("%08x to %i at %0.3f: Window close\n",
            counter++, slot->number, glfwGetTime());
-
-    if (!slot->closeable)
-    {
-        printf("(( closing is disabled, press %s to re-enable )\n",
-               glfwGetKeyName(GLFW_KEY_C, 0));
-    }
 
     glfwSetWindowShouldClose(window, slot->closeable);
 }
@@ -400,34 +377,24 @@ static void scroll_callback(GLFWwindow* window, double x, double y)
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     Slot* slot = glfwGetWindowUserPointer(window);
+    const char* name = glfwGetKeyName(key, scancode);
 
-    if (key == GLFW_KEY_UNKNOWN)
+    if (name)
     {
-        printf("%08x to %i at %0.3f: Key (%s) Scancode 0x%04x (with%s) was %s\n",
-                counter++, slot->number, glfwGetTime(),
-                get_key_name(key), scancode,
-                get_mods_name(mods),
-                get_action_name(action));
+        printf("%08x to %i at %0.3f: Key 0x%04x Scancode 0x%04x (%s) (%s) (with%s) was %s\n",
+               counter++, slot->number, glfwGetTime(), key, scancode,
+               get_key_name(key),
+               name,
+               get_mods_name(mods),
+               get_action_name(action));
     }
     else
     {
-        const char* name = glfwGetKeyName(key, scancode);
-        if (name)
-        {
-            printf("%08x to %i at %0.3f: Key 0x%04x (%s) Scancode 0x%04x Name %s (with%s) was %s\n",
-                   counter++, slot->number, glfwGetTime(),
-                   key, get_key_name(key), scancode, name,
-                   get_mods_name(mods),
-                   get_action_name(action));
-        }
-        else
-        {
-            printf("%08x to %i at %0.3f: Key 0x%04x (%s) Scancode 0x%04x (with%s) was %s\n",
-                   counter++, slot->number, glfwGetTime(),
-                   key, get_key_name(key), scancode,
-                   get_mods_name(mods),
-                   get_action_name(action));
-        }
+        printf("%08x to %i at %0.3f: Key 0x%04x Scancode 0x%04x (%s) (with%s) was %s\n",
+               counter++, slot->number, glfwGetTime(), key, scancode,
+               get_key_name(key),
+               get_mods_name(mods),
+               get_action_name(action));
     }
 
     if (action != GLFW_PRESS)
@@ -457,14 +424,12 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 static void char_callback(GLFWwindow* window, unsigned int codepoint)
 {
     Slot* slot = glfwGetWindowUserPointer(window);
-    char string[5] = "";
-
-    encode_utf8(string, codepoint);
     printf("%08x to %i at %0.3f: Character 0x%08x (%s) input\n",
-           counter++, slot->number, glfwGetTime(), codepoint, string);
+           counter++, slot->number, glfwGetTime(), codepoint,
+           get_character_string(codepoint));
 }
 
-static void drop_callback(GLFWwindow* window, int count, const char* paths[])
+static void drop_callback(GLFWwindow* window, int count, const char** paths)
 {
     int i;
     Slot* slot = glfwGetWindowUserPointer(window);
@@ -520,20 +485,6 @@ static void joystick_callback(int jid, int event)
                axisCount,
                buttonCount,
                hatCount);
-
-        if (glfwJoystickIsGamepad(jid))
-        {
-            printf("  Joystick %i (%s) has a gamepad mapping (%s)\n",
-                   jid,
-                   glfwGetJoystickGUID(jid),
-                   glfwGetGamepadName(jid));
-        }
-        else
-        {
-            printf("  Joystick %i (%s) has no gamepad mapping\n",
-                   jid,
-                   glfwGetJoystickGUID(jid));
-        }
     }
     else
     {
@@ -547,6 +498,8 @@ int main(int argc, char** argv)
     Slot* slots;
     GLFWmonitor* monitor = NULL;
     int ch, i, width, height, count = 1;
+
+    setlocale(LC_ALL, "");
 
     glfwSetErrorCallback(error_callback);
 
@@ -651,8 +604,8 @@ int main(int argc, char** argv)
         glfwSetDropCallback(slots[i].window, drop_callback);
 
         glfwMakeContextCurrent(slots[i].window);
-        gladLoadGL(glfwGetProcAddress);
-        glfwSwapBuffers(slots[i].window);
+        gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+        glfwSwapInterval(1);
     }
 
     printf("Main loop starting\n");
